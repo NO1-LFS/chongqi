@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>冲棋对弈</title>
+    <style type='text/css'>
+        canvas {
+            display: block;
+            margin: 50px auto;
+            box-shadow: -2px -2px 2px #efefef, 5px 5px 5px #b9b9b9;
+            cursor: pointer;
+        }
+        /* 胜利提示框的样式 */
+        #winModal {
+            display: none; /* 默认隐藏 */
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border: 2px solid #333;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            z-index: 1000; /* 确保它显示在最上面 */
+        }
+
+        /* 提示框中的按钮样式 */
+        #winModal button {
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="chess" width="210px" height="210px"></canvas>
+        <!-- 添加胜利提示框 -->
+    <div id="winModal">
+        <p id="winText"></p>
+        <button onclick="restartGame()">重新开始</button>
+    </div>
+    <script type="text/javascript" charset="utf-8">
+        const chess = document.getElementById("chess");
+        const context = chess.getContext('2d');
+        context.strokeStyle = '#bfbfbf';
+
+        let board = [];
+        let piecePositions = [];
+        let selectedPieceIndex = -1;
+        let currentPlayerTurn;
+        const GRID_SIZE = 180 / 3;
+        // 用于标记主动冲上来的棋子，防止被误移除
+        let protectedPiece = null;
+
+        function initBoard() {
+    // 重新初始化棋子位置
+    piecePositions = [];
+    protectedPiece = null; // 重置受保护的棋子
+    initBoardState();
+    drawChessBoard();
+    initPiecePositions();
+    currentPlayerTurn = 1; // 重新设置为玩家1的回合
+
+}
+
+
+        function initBoardState() {
+            board = [];
+            for (let i = 0; i < 4; i++) {
+                board[i] = [];
+                for (let j = 0; j < 4; j++) {
+                    board[i][j] = 0;
+                }
+            }
+        }
+
+        function drawChessBoard() {
+            for (let i = 0; i < 4; i++) {
+                context.moveTo(15 + i * GRID_SIZE, 15);
+                context.lineTo(15 + i * GRID_SIZE, 195);
+                context.stroke();
+            }
+            for (let j = 0; j < 4; j++) {
+                context.moveTo(15, 15 + j * GRID_SIZE);
+                context.lineTo(195, 15 + j * GRID_SIZE);
+                context.stroke();
+            }
+        }
+
+        function drawPiece(x, y, isPlayer) {
+            context.beginPath();
+            context.arc(x, y, 10, 0, 2 * Math.PI);
+            context.closePath();
+            const gradient = context.createRadialGradient(x + 2, y - 2, 10, x + 2, y - 2, 0);
+            if (isPlayer) {
+                gradient.addColorStop(0, '#0a0a0a');
+                gradient.addColorStop(1, '#636766');
+            } else {
+                gradient.addColorStop(0, '#d1d1d1');
+                gradient.addColorStop(1, '#f9f9f9');
+            }
+            context.fillStyle = gradient;
+            context.fill();
+        }
+
+        function drawHighlight(index) {
+            if (index!== -1) {
+                const pos = piecePositions[index];
+                context.save();
+                context.beginPath();
+                context.arc(pos.x, pos.y, 14, 0, 2 * Math.PI);
+                context.strokeStyle = 'yellow';
+                context.lineWidth = 4;
+                context.setLineDash([5, 5]);
+                context.globalAlpha = 0.8;
+                context.stroke();
+                context.restore();
+            }
+        }
+
+        function initPiecePositions() {
+            piecePositions = [
+                { x: 15, y: 15, player: 1 },
+                { x: 75, y: 15, player: 1 },
+                { x: 135, y: 15, player: 1 },
+                { x: 195, y: 15, player: 1 },
+                { x: 15, y: 195, player: 2 },
+                { x: 75, y: 195, player: 2 },
+                { x: 135, y: 195, player: 2 },
+                { x: 195, y: 195, player: 2 }
+            ];
+
+            piecePositions.forEach(position => {
+                drawPiece(position.x, position.y, position.player === 1);
+                const gridX = Math.round((position.x - 15) / GRID_SIZE);
+                const gridY = Math.round((position.y - 15) / GRID_SIZE);
+                board[gridX][gridY] = position.player;
+            });
+        }
+
+        function isValidMove(sourceIndex, targetX, targetY) {
+            const sourcePos = piecePositions[sourceIndex];
+            const xDiff = Math.abs(targetX - sourcePos.x);
+            const yDiff = Math.abs(targetY - sourcePos.y);
+
+            if ((xDiff === GRID_SIZE && yDiff === 0) || (xDiff === 0 && yDiff === GRID_SIZE)) {
+                if (targetX >= 15 && targetX <= 195 && targetY >= 15 && targetY <= 195) {
+                    const targetGridX = Math.round((targetX - 15) / GRID_SIZE);
+                    const targetGridY = Math.round((targetY - 15) / GRID_SIZE);
+                    return board[targetGridX][targetGridY] === 0;
+                }
+            }
+            return false;
+        }
+
+function checkForDefeatedPieces() {
+    const defeatedIndices = [];
+    const opponent = 3 - currentPlayerTurn;
+
+    function isHedged(row, col, isRowCheck) {
+        if (isRowCheck) {
+            return (col >= 2 && board[row][col - 1] === opponent && board[row][col - 2] === opponent) ||
+                (col <= 1 && board[row][col + 1] === opponent && board[row][col + 2] === opponent);
+        } else {
+            return (row >= 2 && board[row - 1][col] === opponent && board[row - 2][col] === opponent) ||
+                (row <= 1 && board[row + 1][col] === opponent && board[row + 2][col] === opponent);
+        }
+    }
+
+    for (let y = 0; y < 4; y++) {
+        for (let x = 0; x < 3; x++) {
+            if (board[x][y] === currentPlayerTurn && board[x + 1][y] === currentPlayerTurn) {
+                if (x - 1 >= 0 && board[x - 1][y] === opponent && !isHedged(y, x - 1, true)) {
+                    if (!isProtected(x - 1, y)) {
+                        addDefeatedPiece(x - 1, y, defeatedIndices);
+                    }
+                }
+                if (x + 2 < 4 && board[x + 2][y] === opponent && !isHedged(y, x + 2, true)) {
+                    if (!isProtected(x + 2, y)) {
+                        addDefeatedPiece(x + 2, y, defeatedIndices);
+                    }
+                }
+            }
+        }
+    }
+
+    for (let x = 0; x < 4; x++) {
+        for (let y = 0; y < 3; y++) {
+            if (board[x][y] === currentPlayerTurn && board[x][y + 1] === currentPlayerTurn) {
+                if (y - 1 >= 0 && board[x][y - 1] === opponent && !isHedged(x, y - 1, false)) {
+                    if (!isProtected(x, y - 1)) {
+                        addDefeatedPiece(x, y - 1, defeatedIndices);
+                    }
+                }
+                if (y + 2 < 4 && board[x][y + 2] === opponent && !isHedged(x, y + 2, false)) {
+                    if (!isProtected(x, y + 2)) {
+                        addDefeatedPiece(x, y + 2, defeatedIndices);
+                    }
+                }
+            }
+        }
+    }
+
+    removeDefeatedPieces(defeatedIndices);
+    // 检查保护的棋子是否还需要保护
+    if (protectedPiece) {
+        const { gridX, gridY } = protectedPiece;
+        if (!isStillProtected(gridX, gridY)) {
+            protectedPiece = null;
+        }
+    }
+
+    // 检查是否有一方获胜
+    checkForWin();
+
+
+}
+
+
+        function isProtected(gridX, gridY) {
+            return protectedPiece && protectedPiece.gridX === gridX && protectedPiece.gridY === gridY;
+        }
+
+        function isStillProtected(gridX, gridY) {
+            const opponent = 3 - protectedPiece.player;
+            // 检查行
+            for (let x = 0; x < 3; x++) {
+                if (board[x][gridY] === opponent && board[x + 1][gridY] === opponent) {
+                    if ((x - 1 >= 0 && x - 1 === gridX) || (x + 2 < 4 && x + 2 === gridX)) {
+                        return true;
+                    }
+                }
+            }
+            // 检查列
+            for (let y = 0; y < 3; y++) {
+                if (board[gridX][y] === opponent && board[gridX][y + 1] === opponent) {
+                    if ((y - 1 >= 0 && y - 1 === gridY) || (y + 2 < 4 && y + 2 === gridY)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function addDefeatedPiece(gridX, gridY, defeatedIndices) {
+            piecePositions.forEach((position, index) => {
+                const posGridX = Math.round((position.x - 15) / GRID_SIZE);
+                const posGridY = Math.round((position.y - 15) / GRID_SIZE);
+                if (posGridX === gridX && posGridY === gridY) {
+                    defeatedIndices.push(index);
+                }
+            });
+        }
+
+        function removeDefeatedPieces(defeatedIndices) {
+            defeatedIndices.sort((a, b) => b - a);
+            defeatedIndices.forEach(index => {
+                const pos = piecePositions[index];
+                const gridX = Math.round((pos.x - 15) / GRID_SIZE);
+                const gridY = Math.round((pos.y - 15) / GRID_SIZE);
+                board[gridX][gridY] = 0;
+                piecePositions.splice(index, 1);
+            });
+        }
+
+        function movePiece(targetX, targetY) {
+            if (selectedPieceIndex === -1) return;
+
+            const sourcePos = piecePositions[selectedPieceIndex];
+            const targetGridX = Math.round((targetX - 15) / GRID_SIZE);
+            const targetGridY = Math.round((targetY - 15) / GRID_SIZE);
+
+            if (isValidMove(selectedPieceIndex, targetX, targetY)) {
+                const sourceGridX = Math.round((sourcePos.x - 15) / GRID_SIZE);
+                const sourceGridY = Math.round((sourcePos.y - 15) / GRID_SIZE);
+                board[sourceGridX][sourceGridY] = 0;
+                board[targetGridX][targetGridY] = currentPlayerTurn;
+
+                piecePositions[selectedPieceIndex].x = 15 + targetGridX * GRID_SIZE;
+                piecePositions[selectedPieceIndex].y = 15 + targetGridY * GRID_SIZE;
+
+                // 检查是否主动冲向对方两个棋子
+                if (isChargingMove(selectedPieceIndex, targetGridX, targetGridY)) {
+                    protectedPiece = { gridX: targetGridX, gridY: targetGridY, player: currentPlayerTurn };
+                } else {
+                    // 如果不是主动冲的情况，移除保护标记
+                    protectedPiece = null;
+                }
+
+                checkForDefeatedPieces();
+
+                redrawBoard();
+
+                currentPlayerTurn = currentPlayerTurn === 1? 2 : 1;
+
+                selectedPieceIndex = -1;
+            }
+        }
+
+        function isChargingMove(sourceIndex, targetGridX, targetGridY) {
+            const opponent = 3 - piecePositions[sourceIndex].player;
+            // 检查行
+            for (let x = 0; x < 3; x++) {
+                if (board[x][targetGridY] === opponent && board[x + 1][targetGridY] === opponent) {
+                    if ((x - 1 >= 0 && x - 1 === targetGridX) || (x + 2 < 4 && x + 2 === targetGridX)) {
+                        return true;
+                    }
+                }
+            }
+            // 检查列
+            for (let y = 0; y < 3; y++) {
+                if (board[targetGridX][y] === opponent && board[targetGridX][y + 1] === opponent) {
+                    if ((y - 1 >= 0 && y - 1 === targetGridY) || (y + 2 < 4 && y + 2 === targetGridY)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function redrawBoard() {
+            context.clearRect(0, 0, chess.width, chess.height);
+            drawChessBoard();
+            piecePositions.forEach(position => {
+                drawPiece(position.x, position.y, position.player === 1);
+            });
+        }
+
+        function handleMouseDown(event) {
+            const rect = chess.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+
+            selectedPieceIndex = -1;
+            piecePositions.forEach((position, index) => {
+                const gridX = Math.round((position.x - 15) / GRID_SIZE);
+                const gridY = Math.round((position.y - 15) / GRID_SIZE);
+                const centerX = 15 + gridX * GRID_SIZE;
+                const centerY = 15 + gridY * GRID_SIZE;
+
+                if (Math.abs(mouseX - centerX) < 12 && Math.abs(mouseY - centerY) < 12) {
+                    if (position.player === currentPlayerTurn) {
+                        selectedPieceIndex = index;
+                        redrawBoard();
+                        drawHighlight(selectedPieceIndex);
+                    }
+                }
+            });
+        }
+
+        function handleMouseMove(event) {
+            if (selectedPieceIndex === -1) return;
+
+            const rect = chess.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+
+            const targetGridX = Math.round((mouseX - 15) / GRID_SIZE);
+            const targetGridY = Math.round((mouseY - 15) / GRID_SIZE);
+
+            const targetX = 15 + targetGridX * GRID_SIZE;
+            const targetY = 15 + targetGridY * GRID_SIZE;
+
+            movePiece(targetX, targetY);
+
+            redrawBoard();
+            drawHighlight(selectedPieceIndex);
+        }
+
+        function handleMouseUp() {
+            if (selectedPieceIndex!== -1) {
+                redrawBoard();
+                selectedPieceIndex = -1;
+            }
+        }
+
+        function checkForWin() {
+            let player1Count = 0;
+            let player2Count = 0;
+
+            piecePositions.forEach(position => {
+                if (position.player === 1) {
+                    player1Count++;
+                } else {
+                    player2Count++;
+                }
+            });
+
+            if (player1Count === 0) {
+                winText.textContent = "白棋获胜！";
+                winModal.style.display = "block"; // 显示提示框
+            } else if (player2Count === 0) {
+                winText.textContent = "黑棋获胜！";
+                winModal.style.display = "block"; // 显示提示框
+            }
+        }
+
+        function restartGame() {
+            winModal.style.display = "none"; // 隐藏提示框
+            initBoard();
+        }
+
+        chess.addEventListener('mousedown', handleMouseDown);
+        chess.addEventListener('mousemove', handleMouseMove);
+        chess.addEventListener('mouseup', handleMouseUp);
+        chess.addEventListener('touchstart', function (event) {
+            handleMouseDown(event.touches[0]);
+        });
+        chess.addEventListener('touchmove', function (event) {
+            handleMouseMove(event.touches[0]);
+        });
+        chess.addEventListener('touchend', handleMouseUp);
+
+        window.onload = initBoard;
+    </script>
+</body>
+
+</html>
