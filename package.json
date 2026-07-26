@@ -1,0 +1,18 @@
+{
+  "name": "chongqi-online",
+  "version": "1.0.0",
+  "private": true,
+  "description": "支持房间联机的冲棋小游戏",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1"
+  }
+}

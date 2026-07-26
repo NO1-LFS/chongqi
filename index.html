@@ -3,66 +3,319 @@
 
 <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>冲棋对弈</title>
     <style type='text/css'>
-        canvas {
-            display: block;
-            margin: 50px auto;
-            box-shadow: -2px -2px 2px #efefef, 5px 5px 5px #b9b9b9;
-            cursor: pointer;
-        }
-        /* 胜利提示框的样式 */
-        #winModal {
-            display: none; /* 默认隐藏 */
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: white;
-            padding: 20px;
-            border: 2px solid #333;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            z-index: 1000; /* 确保它显示在最上面 */
+        * {
+            box-sizing: border-box;
         }
 
-        /* 提示框中的按钮样式 */
-        #winModal button {
-            display: block;
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: #2b2118;
+            font-family: "Microsoft YaHei", system-ui, sans-serif;
+            background:
+                radial-gradient(circle at 20% 10%, rgba(255,255,255,.75), transparent 28%),
+                linear-gradient(145deg, #efe2c5, #d9bd89);
+        }
+
+        .app {
+            width: min(94%, 760px);
             margin: 0 auto;
+            padding: 28px 0 40px;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            text-align: center;
+            letter-spacing: .18em;
+        }
+
+        .subtitle {
+            margin: 0 0 20px;
+            text-align: center;
+            color: #725b40;
+        }
+
+        .game-card, .rules {
+            padding: 20px;
+            border: 1px solid rgba(91, 61, 29, .2);
+            border-radius: 18px;
+            background: rgba(255, 250, 239, .86);
+            box-shadow: 0 16px 40px rgba(77, 50, 19, .14);
+            backdrop-filter: blur(8px);
+        }
+
+        .online-panel {
+            margin-bottom: 18px;
+            padding: 18px;
+            border-radius: 16px;
+            color: #fffaf0;
+            background: linear-gradient(135deg, #5d3b21, #8b5b2e);
+            box-shadow: 0 12px 28px rgba(77, 50, 19, .18);
+        }
+
+        .online-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .online-title strong {
+            font-size: 18px;
+        }
+
+        #connectionText {
+            font-size: 13px;
+            opacity: .85;
+        }
+
+        .room-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .room-actions input {
+            min-width: 0;
+            flex: 1 1 150px;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,.35);
+            border-radius: 999px;
+            color: #2b2118;
+            font: inherit;
+            text-transform: uppercase;
+            background: #fffaf0;
+        }
+
+        .room-actions button {
+            border: 1px solid rgba(255,255,255,.35);
+            background: rgba(255,255,255,.14);
+        }
+
+        .room-info {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .room-code {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: .14em;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        #turnText {
+            font-weight: 700;
+        }
+
+        .counts {
+            color: #725b40;
+            font-size: 14px;
+        }
+
+        canvas {
+            display: block;
+            width: min(78vw, 420px);
+            height: auto;
+            margin: 0 auto;
+            border: 8px solid #7c542e;
+            border-radius: 12px;
+            background: #ddb778;
+            box-shadow: inset 0 0 0 2px #a97b43, 0 10px 24px rgba(58, 36, 12, .22);
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .hint {
+            margin: 14px 0 0;
+            text-align: center;
+            color: #725b40;
+            font-size: 14px;
+        }
+
+        .actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: 0;
+            border-radius: 999px;
+            color: white;
+            font: inherit;
+            font-weight: 700;
+            background: #6e4625;
+            cursor: pointer;
+            transition: transform .15s, background .15s;
+        }
+
+        button:hover {
+            background: #8b5b2e;
+            transform: translateY(-1px);
+        }
+
+        .rules {
+            margin-top: 18px;
+        }
+
+        .rules h2 {
+            margin: 0 0 10px;
+            font-size: 18px;
+        }
+
+        .rules ul {
+            margin: 0;
+            padding-left: 1.4em;
+            line-height: 1.8;
+        }
+
+        #modalOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            place-items: center;
+            padding: 20px;
+            background: rgba(30, 20, 10, .58);
+            z-index: 1000;
+        }
+
+        #winModal {
+            width: min(100%, 340px);
+            padding: 28px;
+            border-radius: 18px;
+            text-align: center;
+            background: #fffaf0;
+            box-shadow: 0 22px 70px rgba(0,0,0,.3);
+        }
+
+        #winText {
+            margin: 0 0 18px;
+            font-size: 26px;
+            font-weight: 800;
+        }
+
+        @media (max-width: 520px) {
+            .app { padding-top: 18px; }
+            .game-card { padding: 14px; }
+            .status-bar { align-items: flex-start; }
+            .counts { text-align: right; }
         }
     </style>
 </head>
 
 <body>
-    <canvas id="chess" width="210px" height="210px"></canvas>
-        <!-- 添加胜利提示框 -->
-    <div id="winModal">
-        <p id="winText"></p>
-        <button onclick="restartGame()">重新开始</button>
+    <main class="app">
+        <h1>冲棋</h1>
+        <p class="subtitle">双人对弈 · 步步为营</p>
+
+        <section class="online-panel">
+            <div class="online-title">
+                <strong>互联网对战</strong>
+                <span id="connectionText">正在连接服务器…</span>
+            </div>
+            <div class="room-actions" id="roomActions">
+                <button type="button" id="createRoomButton">创建房间</button>
+                <input id="roomInput" maxlength="6" placeholder="输入 6 位房间号" autocomplete="off" />
+                <button type="button" id="joinRoomButton">加入房间</button>
+            </div>
+            <div class="room-info" id="roomInfo">
+                <span>房间号：<span class="room-code" id="roomCode">------</span></span>
+                <span id="identityText"></span>
+                <button type="button" id="copyLinkButton">复制邀请链接</button>
+            </div>
+        </section>
+
+        <section class="game-card">
+            <div class="status-bar">
+                <span id="turnText">当前回合：黑棋</span>
+                <span class="counts">
+                    黑棋 <strong id="blackCount">4</strong>
+                    · 白棋 <strong id="whiteCount">4</strong>
+                </span>
+            </div>
+            <canvas id="chess" width="210" height="210" aria-label="冲棋棋盘"></canvas>
+            <p class="hint" id="hintText">点击一枚黑棋开始</p>
+            <div class="actions">
+                <button type="button" onclick="restartGame()" id="restartButton">重新开始</button>
+            </div>
+        </section>
+
+        <section class="rules">
+            <h2>游戏规则</h2>
+            <ul>
+                <li>黑棋先手，每次只能向上、下、左、右移动一格。</li>
+                <li>移动后与己方棋子形成二连，可冲掉正对的一枚敌棋。</li>
+                <li>主动冲到敌方二连前不会死亡；二对二时双方都安全。</li>
+                <li>任意一方棋子全部死亡，该方落败。</li>
+            </ul>
+        </section>
+    </main>
+
+    <div id="modalOverlay">
+        <div id="winModal" role="dialog" aria-modal="true" aria-labelledby="winText">
+            <p id="winText"></p>
+            <button type="button" onclick="restartGame()">申请再来一局</button>
+        </div>
     </div>
+    <script src="/socket.io/socket.io.js"></script>
     <script type="text/javascript" charset="utf-8">
         const chess = document.getElementById("chess");
         const context = chess.getContext('2d');
-        context.strokeStyle = '#bfbfbf';
+        const turnText = document.getElementById("turnText");
+        const hintText = document.getElementById("hintText");
+        const blackCount = document.getElementById("blackCount");
+        const whiteCount = document.getElementById("whiteCount");
+        const modalOverlay = document.getElementById("modalOverlay");
+        const winText = document.getElementById("winText");
+        const connectionText = document.getElementById("connectionText");
+        const roomActions = document.getElementById("roomActions");
+        const roomInfo = document.getElementById("roomInfo");
+        const roomInput = document.getElementById("roomInput");
+        const roomCode = document.getElementById("roomCode");
+        const identityText = document.getElementById("identityText");
+        const createRoomButton = document.getElementById("createRoomButton");
+        const joinRoomButton = document.getElementById("joinRoomButton");
+        const copyLinkButton = document.getElementById("copyLinkButton");
 
         let board = [];
         let piecePositions = [];
         let selectedPieceIndex = -1;
         let currentPlayerTurn;
+        let gameOver = false;
+        let onlineMode = false;
+        let onlinePlayer = null;
+        let onlineRoomId = null;
+        let onlineConnected = false;
         const GRID_SIZE = 180 / 3;
-        // 用于标记主动冲上来的棋子，防止被误移除
-        let protectedPiece = null;
+        const socket = typeof io === "function" ? io() : null;
 
         function initBoard() {
-    // 重新初始化棋子位置
-    piecePositions = [];
-    protectedPiece = null; // 重置受保护的棋子
-    initBoardState();
-    drawChessBoard();
-    initPiecePositions();
-    currentPlayerTurn = 1; // 重新设置为玩家1的回合
-
-}
+            piecePositions = [];
+            selectedPieceIndex = -1;
+            currentPlayerTurn = 1;
+            gameOver = false;
+            modalOverlay.style.display = "none";
+            initBoardState();
+            initPiecePositions();
+            redrawBoard();
+            updateStatus();
+        }
 
 
         function initBoardState() {
@@ -76,16 +329,20 @@
         }
 
         function drawChessBoard() {
+            context.save();
+            context.beginPath();
+            context.strokeStyle = '#6f4b28';
+            context.lineWidth = 2;
             for (let i = 0; i < 4; i++) {
                 context.moveTo(15 + i * GRID_SIZE, 15);
                 context.lineTo(15 + i * GRID_SIZE, 195);
-                context.stroke();
             }
             for (let j = 0; j < 4; j++) {
                 context.moveTo(15, 15 + j * GRID_SIZE);
                 context.lineTo(195, 15 + j * GRID_SIZE);
-                context.stroke();
             }
+            context.stroke();
+            context.restore();
         }
 
         function drawPiece(x, y, isPlayer) {
@@ -110,8 +367,8 @@
                 context.save();
                 context.beginPath();
                 context.arc(pos.x, pos.y, 14, 0, 2 * Math.PI);
-                context.strokeStyle = 'yellow';
-                context.lineWidth = 4;
+                context.strokeStyle = '#ffb000';
+                context.lineWidth = 3;
                 context.setLineDash([5, 5]);
                 context.globalAlpha = 0.8;
                 context.stroke();
@@ -132,7 +389,6 @@
             ];
 
             piecePositions.forEach(position => {
-                drawPiece(position.x, position.y, position.player === 1);
                 const gridX = Math.round((position.x - 15) / GRID_SIZE);
                 const gridY = Math.round((position.y - 15) / GRID_SIZE);
                 board[gridX][gridY] = position.player;
@@ -154,93 +410,102 @@
             return false;
         }
 
-function checkForDefeatedPieces() {
-    const defeatedIndices = [];
-    const opponent = 3 - currentPlayerTurn;
-
-    function isHedged(row, col, isRowCheck) {
-        if (isRowCheck) {
-            return (col >= 2 && board[row][col - 1] === opponent && board[row][col - 2] === opponent) ||
-                (col <= 1 && board[row][col + 1] === opponent && board[row][col + 2] === opponent);
-        } else {
-            return (row >= 2 && board[row - 1][col] === opponent && board[row - 2][col] === opponent) ||
-                (row <= 1 && board[row + 1][col] === opponent && board[row + 2][col] === opponent);
+        function getValidMoves(index) {
+            if (index === -1) return [];
+            const source = piecePositions[index];
+            const moves = [
+                { x: source.x + GRID_SIZE, y: source.y },
+                { x: source.x - GRID_SIZE, y: source.y },
+                { x: source.x, y: source.y + GRID_SIZE },
+                { x: source.x, y: source.y - GRID_SIZE }
+            ];
+            return moves.filter(move => isValidMove(index, move.x, move.y));
         }
-    }
 
-    for (let y = 0; y < 4; y++) {
-        for (let x = 0; x < 3; x++) {
-            if (board[x][y] === currentPlayerTurn && board[x + 1][y] === currentPlayerTurn) {
-                if (x - 1 >= 0 && board[x - 1][y] === opponent && !isHedged(y, x - 1, true)) {
-                    if (!isProtected(x - 1, y)) {
-                        addDefeatedPiece(x - 1, y, defeatedIndices);
-                    }
-                }
-                if (x + 2 < 4 && board[x + 2][y] === opponent && !isHedged(y, x + 2, true)) {
-                    if (!isProtected(x + 2, y)) {
-                        addDefeatedPiece(x + 2, y, defeatedIndices);
+        function drawValidMoves() {
+            getValidMoves(selectedPieceIndex).forEach(move => {
+                context.save();
+                context.beginPath();
+                context.arc(move.x, move.y, 6, 0, 2 * Math.PI);
+                context.fillStyle = 'rgba(42, 145, 78, .82)';
+                context.fill();
+                context.restore();
+            });
+        }
+
+        function syncPiecesFromBoard() {
+            piecePositions = [];
+            for (let x = 0; x < 4; x++) {
+                for (let y = 0; y < 4; y++) {
+                    if (board[x][y] !== 0) {
+                        piecePositions.push({
+                            x: 15 + x * GRID_SIZE,
+                            y: 15 + y * GRID_SIZE,
+                            player: board[x][y]
+                        });
                     }
                 }
             }
         }
-    }
 
-    for (let x = 0; x < 4; x++) {
-        for (let y = 0; y < 3; y++) {
-            if (board[x][y] === currentPlayerTurn && board[x][y + 1] === currentPlayerTurn) {
-                if (y - 1 >= 0 && board[x][y - 1] === opponent && !isHedged(x, y - 1, false)) {
-                    if (!isProtected(x, y - 1)) {
-                        addDefeatedPiece(x, y - 1, defeatedIndices);
-                    }
-                }
-                if (y + 2 < 4 && board[x][y + 2] === opponent && !isHedged(x, y + 2, false)) {
-                    if (!isProtected(x, y + 2)) {
-                        addDefeatedPiece(x, y + 2, defeatedIndices);
-                    }
-                }
-            }
-        }
-    }
-
-    removeDefeatedPieces(defeatedIndices);
-    // 检查保护的棋子是否还需要保护
-    if (protectedPiece) {
-        const { gridX, gridY } = protectedPiece;
-        if (!isStillProtected(gridX, gridY)) {
-            protectedPiece = null;
-        }
-    }
-
-    // 检查是否有一方获胜
-    checkForWin();
-
-
-}
-
-
-        function isProtected(gridX, gridY) {
-            return protectedPiece && protectedPiece.gridX === gridX && protectedPiece.gridY === gridY;
+        function isInsideBoard(gridX, gridY) {
+            return gridX >= 0 && gridX < 4 && gridY >= 0 && gridY < 4;
         }
 
-        function isStillProtected(gridX, gridY) {
-            const opponent = 3 - protectedPiece.player;
-            // 检查行
-            for (let x = 0; x < 3; x++) {
-                if (board[x][gridY] === opponent && board[x + 1][gridY] === opponent) {
-                    if ((x - 1 >= 0 && x - 1 === gridX) || (x + 2 < 4 && x + 2 === gridX)) {
-                        return true;
-                    }
+        // 只有刚移动的棋子与己方棋子组成新的二连时，才会触发吃子。
+        // 棋子主动冲到敌方二连前不会触发判断；二对二时也不会吃子。
+        function checkForDefeatedPieces(movedGridX, movedGridY) {
+            const defeatedIndices = new Set();
+            const opponent = 3 - currentPlayerTurn;
+            const directions = [
+                { dx: 1, dy: 0 },
+                { dx: -1, dy: 0 },
+                { dx: 0, dy: 1 },
+                { dx: 0, dy: -1 }
+            ];
+
+            directions.forEach(({ dx, dy }) => {
+                const friendX = movedGridX + dx;
+                const friendY = movedGridY + dy;
+
+                if (!isInsideBoard(friendX, friendY) ||
+                    board[friendX][friendY] !== currentPlayerTurn) {
+                    return;
                 }
-            }
-            // 检查列
-            for (let y = 0; y < 3; y++) {
-                if (board[gridX][y] === opponent && board[gridX][y + 1] === opponent) {
-                    if ((y - 1 >= 0 && y - 1 === gridY) || (y + 2 < 4 && y + 2 === gridY)) {
-                        return true;
+
+                const candidates = [
+                    {
+                        x: movedGridX - dx,
+                        y: movedGridY - dy,
+                        beyondX: movedGridX - 2 * dx,
+                        beyondY: movedGridY - 2 * dy
+                    },
+                    {
+                        x: movedGridX + 2 * dx,
+                        y: movedGridY + 2 * dy,
+                        beyondX: movedGridX + 3 * dx,
+                        beyondY: movedGridY + 3 * dy
                     }
-                }
-            }
-            return false;
+                ];
+
+                candidates.forEach(candidate => {
+                    if (!isInsideBoard(candidate.x, candidate.y) ||
+                        board[candidate.x][candidate.y] !== opponent) {
+                        return;
+                    }
+
+                    const isTwoAgainstTwo =
+                        isInsideBoard(candidate.beyondX, candidate.beyondY) &&
+                        board[candidate.beyondX][candidate.beyondY] === opponent;
+
+                    if (!isTwoAgainstTwo) {
+                        addDefeatedPiece(candidate.x, candidate.y, defeatedIndices);
+                    }
+                });
+            });
+
+            removeDefeatedPieces([...defeatedIndices]);
+            checkForWin();
         }
 
         function addDefeatedPiece(gridX, gridY, defeatedIndices) {
@@ -248,7 +513,7 @@ function checkForDefeatedPieces() {
                 const posGridX = Math.round((position.x - 15) / GRID_SIZE);
                 const posGridY = Math.round((position.y - 15) / GRID_SIZE);
                 if (posGridX === gridX && posGridY === gridY) {
-                    defeatedIndices.push(index);
+                    defeatedIndices.add(index);
                 }
             });
         }
@@ -265,7 +530,7 @@ function checkForDefeatedPieces() {
         }
 
         function movePiece(targetX, targetY) {
-            if (selectedPieceIndex === -1) return;
+            if (selectedPieceIndex === -1 || gameOver) return false;
 
             const sourcePos = piecePositions[selectedPieceIndex];
             const targetGridX = Math.round((targetX - 15) / GRID_SIZE);
@@ -274,47 +539,33 @@ function checkForDefeatedPieces() {
             if (isValidMove(selectedPieceIndex, targetX, targetY)) {
                 const sourceGridX = Math.round((sourcePos.x - 15) / GRID_SIZE);
                 const sourceGridY = Math.round((sourcePos.y - 15) / GRID_SIZE);
+
+                if (onlineMode) {
+                    socket.emit("make-move", {
+                        from: { x: sourceGridX, y: sourceGridY },
+                        to: { x: targetGridX, y: targetGridY }
+                    }, result => {
+                        if (!result.ok) hintText.textContent = result.error;
+                    });
+                    selectedPieceIndex = -1;
+                    redrawBoard();
+                    return true;
+                }
+
                 board[sourceGridX][sourceGridY] = 0;
                 board[targetGridX][targetGridY] = currentPlayerTurn;
 
                 piecePositions[selectedPieceIndex].x = 15 + targetGridX * GRID_SIZE;
                 piecePositions[selectedPieceIndex].y = 15 + targetGridY * GRID_SIZE;
 
-                // 检查是否主动冲向对方两个棋子
-                if (isChargingMove(selectedPieceIndex, targetGridX, targetGridY)) {
-                    protectedPiece = { gridX: targetGridX, gridY: targetGridY, player: currentPlayerTurn };
-                } else {
-                    // 如果不是主动冲的情况，移除保护标记
-                    protectedPiece = null;
-                }
-
-                checkForDefeatedPieces();
-
-                redrawBoard();
-
-                currentPlayerTurn = currentPlayerTurn === 1? 2 : 1;
-
+                checkForDefeatedPieces(targetGridX, targetGridY);
                 selectedPieceIndex = -1;
-            }
-        }
-
-        function isChargingMove(sourceIndex, targetGridX, targetGridY) {
-            const opponent = 3 - piecePositions[sourceIndex].player;
-            // 检查行
-            for (let x = 0; x < 3; x++) {
-                if (board[x][targetGridY] === opponent && board[x + 1][targetGridY] === opponent) {
-                    if ((x - 1 >= 0 && x - 1 === targetGridX) || (x + 2 < 4 && x + 2 === targetGridX)) {
-                        return true;
-                    }
+                if (!gameOver) {
+                    currentPlayerTurn = currentPlayerTurn === 1 ? 2 : 1;
                 }
-            }
-            // 检查列
-            for (let y = 0; y < 3; y++) {
-                if (board[targetGridX][y] === opponent && board[targetGridX][y + 1] === opponent) {
-                    if ((y - 1 >= 0 && y - 1 === targetGridY) || (y + 2 < 4 && y + 2 === targetGridY)) {
-                        return true;
-                    }
-                }
+                redrawBoard();
+                updateStatus();
+                return true;
             }
             return false;
         }
@@ -325,53 +576,65 @@ function checkForDefeatedPieces() {
             piecePositions.forEach(position => {
                 drawPiece(position.x, position.y, position.player === 1);
             });
+            drawHighlight(selectedPieceIndex);
+            drawValidMoves();
         }
 
-        function handleMouseDown(event) {
+        function getBoardPoint(event) {
             const rect = chess.getBoundingClientRect();
-            const mouseX = event.clientX - rect.left;
-            const mouseY = event.clientY - rect.top;
+            return {
+                x: (event.clientX - rect.left) * chess.width / rect.width,
+                y: (event.clientY - rect.top) * chess.height / rect.height
+            };
+        }
 
-            selectedPieceIndex = -1;
-            piecePositions.forEach((position, index) => {
-                const gridX = Math.round((position.x - 15) / GRID_SIZE);
-                const gridY = Math.round((position.y - 15) / GRID_SIZE);
-                const centerX = 15 + gridX * GRID_SIZE;
-                const centerY = 15 + gridY * GRID_SIZE;
+        function handleBoardClick(event) {
+            if (gameOver) return;
+            if (onlineMode && (!onlineConnected || onlinePlayer !== currentPlayerTurn)) {
+                hintText.textContent = !onlineConnected ? "请等待对手上线" : "现在是对手的回合";
+                return;
+            }
 
-                if (Math.abs(mouseX - centerX) < 12 && Math.abs(mouseY - centerY) < 12) {
-                    if (position.player === currentPlayerTurn) {
-                        selectedPieceIndex = index;
-                        redrawBoard();
-                        drawHighlight(selectedPieceIndex);
-                    }
-                }
+            const point = getBoardPoint(event);
+            const clickedIndex = piecePositions.findIndex(position => {
+                return Math.hypot(point.x - position.x, point.y - position.y) < 16;
             });
-        }
 
-        function handleMouseMove(event) {
+            if (clickedIndex !== -1 &&
+                piecePositions[clickedIndex].player === currentPlayerTurn) {
+                selectedPieceIndex = clickedIndex;
+                hintText.textContent = "绿色圆点是可以移动的位置";
+                redrawBoard();
+                return;
+            }
+
             if (selectedPieceIndex === -1) return;
-
-            const rect = chess.getBoundingClientRect();
-            const mouseX = event.clientX - rect.left;
-            const mouseY = event.clientY - rect.top;
-
-            const targetGridX = Math.round((mouseX - 15) / GRID_SIZE);
-            const targetGridY = Math.round((mouseY - 15) / GRID_SIZE);
-
+            const targetGridX = Math.round((point.x - 15) / GRID_SIZE);
+            const targetGridY = Math.round((point.y - 15) / GRID_SIZE);
             const targetX = 15 + targetGridX * GRID_SIZE;
             const targetY = 15 + targetGridY * GRID_SIZE;
-
-            movePiece(targetX, targetY);
-
-            redrawBoard();
-            drawHighlight(selectedPieceIndex);
+            if (!movePiece(targetX, targetY)) {
+                hintText.textContent = "这里只能移动到相邻的绿色空位";
+            }
         }
 
-        function handleMouseUp() {
-            if (selectedPieceIndex!== -1) {
-                redrawBoard();
-                selectedPieceIndex = -1;
+        function updateStatus() {
+            const player1Count = piecePositions.filter(piece => piece.player === 1).length;
+            const player2Count = piecePositions.filter(piece => piece.player === 2).length;
+            blackCount.textContent = player1Count;
+            whiteCount.textContent = player2Count;
+            if (!gameOver) {
+                const playerName = currentPlayerTurn === 1 ? "黑棋" : "白棋";
+                turnText.textContent = `当前回合：${playerName}`;
+                if (onlineMode) {
+                    hintText.textContent = !onlineConnected
+                        ? "等待另一名玩家进入房间"
+                        : onlinePlayer === currentPlayerTurn
+                            ? "轮到你了，选择一枚棋子"
+                            : "等待对手走棋";
+                } else {
+                    hintText.textContent = `点击一枚${playerName}开始`;
+                }
             }
         }
 
@@ -389,28 +652,125 @@ function checkForDefeatedPieces() {
 
             if (player1Count === 0) {
                 winText.textContent = "白棋获胜！";
-                winModal.style.display = "block"; // 显示提示框
+                gameOver = true;
+                modalOverlay.style.display = "grid";
             } else if (player2Count === 0) {
                 winText.textContent = "黑棋获胜！";
-                winModal.style.display = "block"; // 显示提示框
+                gameOver = true;
+                modalOverlay.style.display = "grid";
             }
         }
 
         function restartGame() {
-            winModal.style.display = "none"; // 隐藏提示框
+            if (onlineMode) {
+                modalOverlay.style.display = "none";
+                socket.emit("request-restart", {}, result => {
+                    hintText.textContent = result.ok ? "已申请重新开始，等待对手同意" : result.error;
+                });
+                return;
+            }
             initBoard();
         }
 
-        chess.addEventListener('mousedown', handleMouseDown);
-        chess.addEventListener('mousemove', handleMouseMove);
-        chess.addEventListener('mouseup', handleMouseUp);
-        chess.addEventListener('touchstart', function (event) {
-            handleMouseDown(event.touches[0]);
-        });
-        chess.addEventListener('touchmove', function (event) {
-            handleMouseMove(event.touches[0]);
-        });
-        chess.addEventListener('touchend', handleMouseUp);
+        chess.addEventListener('pointerdown', handleBoardClick);
+
+        function saveSession(result) {
+            sessionStorage.setItem("chongqi-session", JSON.stringify({
+                roomId: result.roomId,
+                token: result.token
+            }));
+        }
+
+        function enterOnlineRoom(result) {
+            onlineMode = true;
+            onlinePlayer = result.player;
+            onlineRoomId = result.roomId;
+            roomActions.style.display = "none";
+            roomInfo.style.display = "flex";
+            roomCode.textContent = result.roomId;
+            identityText.textContent = `你是${result.player === 1 ? "黑棋" : "白棋"}`;
+            const url = new URL(location.href);
+            url.searchParams.set("room", result.roomId);
+            history.replaceState(null, "", url);
+        }
+
+        function showRoomError(message) {
+            connectionText.textContent = message;
+        }
+
+        if (socket) {
+            socket.on("connect", () => {
+                connectionText.textContent = "服务器已连接";
+                const saved = sessionStorage.getItem("chongqi-session");
+                if (saved && !onlineMode) {
+                    const session = JSON.parse(saved);
+                    socket.emit("resume-room", session, result => {
+                        if (result.ok) enterOnlineRoom({ ...result, token: session.token });
+                        else sessionStorage.removeItem("chongqi-session");
+                    });
+                }
+            });
+
+            socket.on("disconnect", () => {
+                connectionText.textContent = "连接中断，正在重连…";
+                onlineConnected = false;
+                updateStatus();
+            });
+
+            socket.on("game-state", state => {
+                if (!onlineMode || state.roomId !== onlineRoomId) return;
+                board = state.board.map(column => [...column]);
+                currentPlayerTurn = state.currentTurn;
+                gameOver = state.gameOver;
+                onlineConnected = state.connected.black && state.connected.white;
+                selectedPieceIndex = -1;
+                syncPiecesFromBoard();
+                redrawBoard();
+                updateStatus();
+                connectionText.textContent = onlineConnected ? "双方在线" : "等待对手上线";
+                if (state.gameOver) {
+                    winText.textContent = state.winner === 1 ? "黑棋获胜！" : "白棋获胜！";
+                    modalOverlay.style.display = "grid";
+                } else {
+                    modalOverlay.style.display = "none";
+                    if (state.restartVotes === 1) {
+                        hintText.textContent = "一方已申请重新开始，等待另一方同意";
+                    }
+                }
+            });
+
+            createRoomButton.addEventListener("click", () => {
+                socket.emit("create-room", {}, result => {
+                    if (!result.ok) return showRoomError(result.error);
+                    saveSession(result);
+                    enterOnlineRoom(result);
+                });
+            });
+
+            joinRoomButton.addEventListener("click", () => {
+                const requestedRoom = roomInput.value.trim().toUpperCase();
+                socket.emit("join-room", { roomId: requestedRoom }, result => {
+                    if (!result.ok) return showRoomError(result.error);
+                    saveSession(result);
+                    enterOnlineRoom(result);
+                });
+            });
+
+            copyLinkButton.addEventListener("click", async () => {
+                const url = new URL(location.href);
+                url.searchParams.set("room", onlineRoomId);
+                await navigator.clipboard.writeText(url.toString());
+                copyLinkButton.textContent = "已复制";
+                setTimeout(() => copyLinkButton.textContent = "复制邀请链接", 1500);
+            });
+
+            const invitedRoom = new URLSearchParams(location.search).get("room");
+            if (invitedRoom) roomInput.value = invitedRoom.toUpperCase();
+        } else {
+            connectionText.textContent = "请通过 Node.js 服务打开以使用联机";
+            createRoomButton.disabled = true;
+            joinRoomButton.disabled = true;
+        }
 
         window.onload = initBoard;
     </script>
