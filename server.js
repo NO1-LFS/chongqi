@@ -12,6 +12,11 @@ const server = http.createServer(app);
 const io = new Server(server);
 const rooms = new Map();
 const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const QUICK_VOICE_IDS = new Set([
+    "hello", "start", "your-turn", "hurry", "good-move", "brilliant",
+    "interesting", "watch-me", "careful", "well-played", "rematch", "thanks"
+]);
+const QUICK_VOICE_COOLDOWN = 3000;
 
 app.get("/", (_request, response) => {
     response.sendFile(path.join(__dirname, "index.html"));
@@ -142,6 +147,25 @@ io.on("connection", socket => {
         }
         reply?.({ ok: true });
         emitRoom(room);
+    });
+
+    socket.on("quick-voice", (payload, reply) => {
+        const room = rooms.get(socket.data.roomId);
+        if (!room) return reply?.({ ok: false, error: "你不在房间中" });
+        const voiceId = String(payload?.id || "");
+        if (!QUICK_VOICE_IDS.has(voiceId)) {
+            return reply?.({ ok: false, error: "未知语音" });
+        }
+        const now = Date.now();
+        if (socket.data.lastVoiceAt && now - socket.data.lastVoiceAt < QUICK_VOICE_COOLDOWN) {
+            return reply?.({ ok: false, error: "语音发送太频繁，请稍等" });
+        }
+        socket.data.lastVoiceAt = now;
+        io.to(room.id).emit("quick-voice", {
+            player: socket.data.player,
+            id: voiceId
+        });
+        reply?.({ ok: true });
     });
 
     socket.on("disconnect", () => {

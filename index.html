@@ -48,6 +48,7 @@
         }
 
         .online-panel {
+            position: relative;
             margin-bottom: 18px;
             padding: 18px;
             border-radius: 16px;
@@ -110,6 +111,63 @@
             letter-spacing: .14em;
         }
 
+        .voice-toolbar {
+            display: none;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .voice-toolbar button {
+            padding: 8px 14px;
+            border: 1px solid rgba(255,255,255,.3);
+            background: rgba(255,255,255,.13);
+        }
+
+        .voice-panel {
+            position: absolute;
+            z-index: 20;
+            top: calc(100% - 8px);
+            right: 18px;
+            display: none;
+            width: min(430px, calc(100% - 36px));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,.2);
+            border-radius: 14px;
+            background: #5d3b21;
+            box-shadow: 0 16px 36px rgba(48, 28, 10, .3);
+        }
+
+        .voice-panel.open {
+            display: grid;
+        }
+
+        .voice-panel button {
+            padding: 8px 10px;
+            border: 1px solid rgba(255,255,255,.22);
+            border-radius: 10px;
+            font-size: 13px;
+            background: rgba(255,255,255,.1);
+        }
+
+        .voice-bubble {
+            display: none;
+            margin: 0 0 12px;
+            padding: 9px 13px;
+            border-radius: 12px;
+            text-align: center;
+            color: #5d3b21;
+            font-weight: 700;
+            background: #fff1c9;
+            animation: bubble-in .2s ease-out;
+        }
+
+        @keyframes bubble-in {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .status-bar {
             display: flex;
             align-items: center;
@@ -150,6 +208,7 @@
         .actions {
             display: flex;
             justify-content: center;
+            gap: 10px;
             margin-top: 16px;
         }
 
@@ -215,6 +274,21 @@
             .game-card { padding: 14px; }
             .status-bar { align-items: flex-start; }
             .counts { text-align: right; }
+            .room-info > span:first-child {
+                width: 100%;
+            }
+            .voice-toolbar {
+                width: 100%;
+                margin-left: 0;
+            }
+            .voice-toolbar button {
+                flex: 1;
+            }
+            .voice-panel {
+                right: 10px;
+                width: calc(100% - 20px);
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
         }
     </style>
 </head>
@@ -238,10 +312,16 @@
                 <span>房间号：<span class="room-code" id="roomCode">------</span></span>
                 <span id="identityText"></span>
                 <button type="button" id="copyLinkButton">复制邀请链接</button>
+                <div class="voice-toolbar" id="voiceToolbar">
+                    <button type="button" id="voicePanelButton" aria-expanded="false">💬 快捷语音</button>
+                    <button type="button" id="muteOpponentButton">🔊 对方语音开</button>
+                </div>
             </div>
+            <div class="voice-panel" id="voicePanel"></div>
         </section>
 
         <section class="game-card">
+            <div class="voice-bubble" id="voiceBubble" role="status"></div>
             <div class="status-bar">
                 <span id="turnText">当前回合：黑棋</span>
                 <span class="counts">
@@ -253,6 +333,7 @@
             <p class="hint" id="hintText">点击一枚黑棋开始</p>
             <div class="actions">
                 <button type="button" onclick="restartGame()" id="restartButton">重新开始</button>
+                <button type="button" id="soundButton" aria-pressed="false">🔊 音效开</button>
             </div>
         </section>
 
@@ -292,6 +373,12 @@
         const createRoomButton = document.getElementById("createRoomButton");
         const joinRoomButton = document.getElementById("joinRoomButton");
         const copyLinkButton = document.getElementById("copyLinkButton");
+        const soundButton = document.getElementById("soundButton");
+        const voiceToolbar = document.getElementById("voiceToolbar");
+        const voicePanelButton = document.getElementById("voicePanelButton");
+        const muteOpponentButton = document.getElementById("muteOpponentButton");
+        const voicePanel = document.getElementById("voicePanel");
+        const voiceBubble = document.getElementById("voiceBubble");
 
         let board = [];
         let piecePositions = [];
@@ -302,8 +389,166 @@
         let onlinePlayer = null;
         let onlineRoomId = null;
         let onlineConnected = false;
+        let audioContext = null;
+        let soundEnabled = localStorage.getItem("chongqi-sound") !== "off";
+        let opponentVoiceMuted = localStorage.getItem("chongqi-opponent-voice") === "muted";
+        let voiceBubbleTimer = null;
+        let voiceCooldownUntil = 0;
+        let lastOnlineState = null;
         const GRID_SIZE = 180 / 3;
         const socket = typeof io === "function" ? io() : null;
+        const QUICK_VOICES = {
+            "hello": ["你好", "你好，请多指教！"],
+            "start": ["开始吧", "准备好了，开始吧！"],
+            "your-turn": ["该你了", "该你走棋了。"],
+            "hurry": ["快一点", "时间不等人，请快些落子。"],
+            "good-move": ["好棋", "好棋！"],
+            "brilliant": ["妙手", "妙手，果然厉害！"],
+            "interesting": ["有意思", "这一步，有点意思。"],
+            "watch-me": ["看我的", "看我的这一手！"],
+            "careful": ["小心了", "小心，我要进攻了！"],
+            "well-played": ["承让", "承让，承让！"],
+            "rematch": ["再来一局", "棋逢对手，再来一局！"],
+            "thanks": ["谢谢对局", "多谢赐教，下次再战！"]
+        };
+
+        function getAudioContext() {
+            if (!soundEnabled) return null;
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) return null;
+            if (!audioContext) audioContext = new AudioContextClass();
+            if (audioContext.state === "suspended") audioContext.resume();
+            return audioContext;
+        }
+
+        function playTone(frequency, duration, options = {}) {
+            const audio = getAudioContext();
+            if (!audio) return;
+            const oscillator = audio.createOscillator();
+            const gain = audio.createGain();
+            const now = audio.currentTime + (options.delay || 0);
+            oscillator.type = options.type || "sine";
+            oscillator.frequency.setValueAtTime(frequency, now);
+            if (options.endFrequency) {
+                oscillator.frequency.exponentialRampToValueAtTime(options.endFrequency, now + duration);
+            }
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(options.volume || 0.12, now + 0.012);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+            oscillator.connect(gain);
+            gain.connect(audio.destination);
+            oscillator.start(now);
+            oscillator.stop(now + duration + 0.02);
+        }
+
+        function playSound(name) {
+            if (!soundEnabled) return;
+            if (name === "select") playTone(520, 0.07, { type: "sine", volume: 0.07 });
+            if (name === "move") playTone(260, 0.11, { type: "triangle", endFrequency: 190 });
+            if (name === "capture") {
+                playTone(170, 0.18, { type: "square", endFrequency: 85, volume: 0.09 });
+                playTone(110, 0.2, { type: "triangle", delay: 0.04, volume: 0.08 });
+            }
+            if (name === "turn") {
+                playTone(660, 0.11, { volume: 0.08 });
+                playTone(880, 0.15, { delay: 0.1, volume: 0.08 });
+            }
+            if (name === "error") playTone(115, 0.16, { type: "sawtooth", endFrequency: 90, volume: 0.055 });
+            if (name === "win") {
+                [523, 659, 784, 1047].forEach((frequency, index) =>
+                    playTone(frequency, 0.24, { delay: index * 0.12, volume: 0.09 })
+                );
+            }
+        }
+
+        function updateSoundButton() {
+            soundButton.textContent = soundEnabled ? "🔊 音效开" : "🔇 音效关";
+            soundButton.setAttribute("aria-pressed", String(!soundEnabled));
+        }
+
+        soundButton.addEventListener("click", () => {
+            soundEnabled = !soundEnabled;
+            localStorage.setItem("chongqi-sound", soundEnabled ? "on" : "off");
+            updateSoundButton();
+            if (soundEnabled) playSound("select");
+        });
+        updateSoundButton();
+
+        function speakQuickVoice(text) {
+            if (!("speechSynthesis" in window)) return;
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = "zh-CN";
+            utterance.rate = 1.02;
+            utterance.pitch = 0.88;
+            utterance.volume = 0.95;
+            const chineseVoice = speechSynthesis.getVoices().find(voice =>
+                voice.lang.toLowerCase().startsWith("zh")
+            );
+            if (chineseVoice) utterance.voice = chineseVoice;
+            speechSynthesis.speak(utterance);
+        }
+
+        function showVoiceBubble(player, text) {
+            clearTimeout(voiceBubbleTimer);
+            voiceBubble.textContent = `${player === 1 ? "黑棋" : "白棋"}：${text}`;
+            voiceBubble.style.display = "block";
+            voiceBubbleTimer = setTimeout(() => {
+                voiceBubble.style.display = "none";
+            }, 3000);
+        }
+
+        function updateOpponentVoiceButton() {
+            muteOpponentButton.textContent = opponentVoiceMuted
+                ? "🔇 对方语音关"
+                : "🔊 对方语音开";
+            muteOpponentButton.setAttribute("aria-pressed", String(opponentVoiceMuted));
+        }
+
+        Object.entries(QUICK_VOICES).forEach(([id, [label]]) => {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = label;
+            button.addEventListener("click", () => {
+                if (!onlineMode) return;
+                if (Date.now() < voiceCooldownUntil) {
+                    hintText.textContent = "快捷语音冷却中，请稍等";
+                    playSound("error");
+                    return;
+                }
+                socket.emit("quick-voice", { id }, result => {
+                    if (!result.ok) {
+                        hintText.textContent = result.error;
+                        playSound("error");
+                        return;
+                    }
+                    voiceCooldownUntil = Date.now() + 3000;
+                    voicePanel.classList.remove("open");
+                });
+            });
+            voicePanel.appendChild(button);
+        });
+
+        voicePanelButton.addEventListener("click", () => {
+            const isOpen = voicePanel.classList.toggle("open");
+            voicePanelButton.setAttribute("aria-expanded", String(isOpen));
+        });
+
+        document.addEventListener("pointerdown", event => {
+            if (!voicePanel.classList.contains("open")) return;
+            if (voicePanel.contains(event.target) || voicePanelButton.contains(event.target)) return;
+            voicePanel.classList.remove("open");
+            voicePanelButton.setAttribute("aria-expanded", "false");
+        });
+
+        muteOpponentButton.addEventListener("click", () => {
+            opponentVoiceMuted = !opponentVoiceMuted;
+            localStorage.setItem(
+                "chongqi-opponent-voice",
+                opponentVoiceMuted ? "muted" : "on"
+            );
+            updateOpponentVoiceButton();
+        });
+        updateOpponentVoiceButton();
 
         function initBoard() {
             piecePositions = [];
@@ -506,6 +751,7 @@
 
             removeDefeatedPieces([...defeatedIndices]);
             checkForWin();
+            return defeatedIndices.size;
         }
 
         function addDefeatedPiece(gridX, gridY, defeatedIndices) {
@@ -545,7 +791,10 @@
                         from: { x: sourceGridX, y: sourceGridY },
                         to: { x: targetGridX, y: targetGridY }
                     }, result => {
-                        if (!result.ok) hintText.textContent = result.error;
+                        if (!result.ok) {
+                            hintText.textContent = result.error;
+                            playSound("error");
+                        }
                     });
                     selectedPieceIndex = -1;
                     redrawBoard();
@@ -558,7 +807,8 @@
                 piecePositions[selectedPieceIndex].x = 15 + targetGridX * GRID_SIZE;
                 piecePositions[selectedPieceIndex].y = 15 + targetGridY * GRID_SIZE;
 
-                checkForDefeatedPieces(targetGridX, targetGridY);
+                const defeatedCount = checkForDefeatedPieces(targetGridX, targetGridY);
+                if (!gameOver) playSound(defeatedCount > 0 ? "capture" : "move");
                 selectedPieceIndex = -1;
                 if (!gameOver) {
                     currentPlayerTurn = currentPlayerTurn === 1 ? 2 : 1;
@@ -592,6 +842,7 @@
             if (gameOver) return;
             if (onlineMode && (!onlineConnected || onlinePlayer !== currentPlayerTurn)) {
                 hintText.textContent = !onlineConnected ? "请等待对手上线" : "现在是对手的回合";
+                playSound("error");
                 return;
             }
 
@@ -604,6 +855,7 @@
                 piecePositions[clickedIndex].player === currentPlayerTurn) {
                 selectedPieceIndex = clickedIndex;
                 hintText.textContent = "绿色圆点是可以移动的位置";
+                playSound("select");
                 redrawBoard();
                 return;
             }
@@ -615,6 +867,7 @@
             const targetY = 15 + targetGridY * GRID_SIZE;
             if (!movePiece(targetX, targetY)) {
                 hintText.textContent = "这里只能移动到相邻的绿色空位";
+                playSound("error");
             }
         }
 
@@ -654,10 +907,12 @@
                 winText.textContent = "白棋获胜！";
                 gameOver = true;
                 modalOverlay.style.display = "grid";
+                playSound("win");
             } else if (player2Count === 0) {
                 winText.textContent = "黑棋获胜！";
                 gameOver = true;
                 modalOverlay.style.display = "grid";
+                playSound("win");
             }
         }
 
@@ -685,8 +940,10 @@
             onlineMode = true;
             onlinePlayer = result.player;
             onlineRoomId = result.roomId;
+            lastOnlineState = null;
             roomActions.style.display = "none";
             roomInfo.style.display = "flex";
+            voiceToolbar.style.display = "flex";
             roomCode.textContent = result.roomId;
             identityText.textContent = `你是${result.player === 1 ? "黑棋" : "白棋"}`;
             const url = new URL(location.href);
@@ -696,6 +953,7 @@
 
         function showRoomError(message) {
             connectionText.textContent = message;
+            playSound("error");
         }
 
         if (socket) {
@@ -717,8 +975,38 @@
                 updateStatus();
             });
 
+            socket.on("quick-voice", message => {
+                const voice = QUICK_VOICES[message?.id];
+                if (!voice) return;
+                const text = voice[1];
+                showVoiceBubble(message.player, text);
+                if (message.player === onlinePlayer || !opponentVoiceMuted) {
+                    speakQuickVoice(text);
+                }
+            });
+
             socket.on("game-state", state => {
                 if (!onlineMode || state.roomId !== onlineRoomId) return;
+                const nextCounts = state.board.flat().filter(Boolean).length;
+                if (lastOnlineState) {
+                    if (state.gameOver && !lastOnlineState.gameOver) {
+                        playSound("win");
+                    } else if (nextCounts < lastOnlineState.pieceCount) {
+                        playSound("capture");
+                    } else if (state.currentTurn !== lastOnlineState.currentTurn) {
+                        playSound("move");
+                    }
+                    if (!state.gameOver &&
+                        state.currentTurn !== lastOnlineState.currentTurn &&
+                        state.currentTurn === onlinePlayer) {
+                        setTimeout(() => playSound("turn"), 130);
+                    }
+                }
+                lastOnlineState = {
+                    pieceCount: nextCounts,
+                    currentTurn: state.currentTurn,
+                    gameOver: state.gameOver
+                };
                 board = state.board.map(column => [...column]);
                 currentPlayerTurn = state.currentTurn;
                 gameOver = state.gameOver;
